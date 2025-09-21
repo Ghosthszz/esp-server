@@ -172,15 +172,31 @@ let cadastroTimeout;
 // WebSocket
 let ws;
 function conectarWebSocket() {
-  ws = new WebSocket(`ws://${window.location.hostname}:8080/`);
+  // Substitui o IP local pelo domínio do Render e usa wss://
+  ws = new WebSocket(`wss://esp-server-0cde.onrender.com/`);
+
   ws.onopen = () => console.log("WebSocket conectado");
+
   ws.onmessage = (event) => {
     const msg = event.data;
+
     if(msg.startsWith("cartao:")) {
       const uid = msg.substring(7);
       showPopup("Cartão cadastrado: " + uid, 5000);
       carregarLogs();
+    } else {
+      try{
+        const data = JSON.parse(msg);
+        if(data.event === "log"){
+          addLog(data.msg);
+        }
+      } catch(e){ /* mensagem não JSON */ }
     }
+  };
+
+  ws.onclose = () => {
+    console.log("WebSocket desconectado, reconectando...");
+    setTimeout(conectarWebSocket, 5000);
   };
 }
 conectarWebSocket();
