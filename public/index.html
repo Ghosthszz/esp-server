@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ESP8266 Controle - Dark</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+
+body {
+  font-family: 'Roboto', sans-serif;
+  margin: 0;
+  padding: 0;
+  background: #0d1117;
+  color: #ddd;
+}
+
+.container {
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+h1, h2 {
+  text-align: center;
+  color: #9b59b6;
+  margin: 0;
+}
+
+.status-card {
+  background: #161b22;
+  padding: 15px;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+
+.status-card p { margin: 5px 0; font-weight: bold; }
+
+button {
+  width: 100%;
+  padding: 16px;
+  font-size: 16px;
+  border: none;
+  border-radius: 12px;
+  background-color: #6c5ce7;
+  color: #fff;
+  cursor: pointer;
+  transition: 0.3s;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+}
+button:hover { background-color: #5a4dcf; transform: translateY(-2px); }
+
+select {
+  width: 100%;
+  padding: 12px;
+  font-size: 16px;
+  border-radius: 12px;
+  border: none;
+  background: #1f1f2e;
+  color: #fff;
+  margin-bottom: 10px;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.logs-card {
+  background: #161b22;
+  padding: 15px;
+  border-radius: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+.logs-card ul { list-style: none; padding: 0; margin: 0; }
+.logs-card li {
+  background: #1f1f2e;
+  margin: 5px 0;
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 14px;
+  word-break: break-word;
+}
+
+.popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(13,17,23,0.85);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.popup {
+  background: #1f1f2e;
+  padding: 25px;
+  border-radius: 12px;
+  text-align: center;
+  max-width: 80%;
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+}
+.popup button {
+  margin-top: 15px;
+  background: #6c5ce7;
+  padding: 12px 24px;
+  border-radius: 10px;
+  font-size: 15px;
+}
+
+#cadastroContainer { display: none; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>ESP8266 Controle</h1>
+
+  <div class="status-card">
+    <p id="espStatus">ESP desconectada</p>
+    <p id="espIP">IP: --</p>
+  </div>
+
+  <button id="btnAcionar">Acionar Rele</button>
+  
+  <div id="cadastroContainer">
+    <h2>Cadastro de Cartão</h2>
+    <select id="tempoCadastro">
+      <option value="0">Até reiniciar</option>
+      <option value="1">1 dia</option>
+      <option value="2">2 dias</option>
+      <option value="3">3 dias</option>
+      <option value="4">4 dias</option>
+      <option value="5">5 dias</option>
+      <option value="6">6 dias</option>
+      <option value="7">7 dias</option>
+    </select>
+    <button id="btnCadastro">Cadastrar Cartão</button>
+  </div>
+
+  <h2>Logs</h2>
+  <div class="logs-card">
+    <ul id="logList"></ul>
+  </div>
+</div>
+
+<div class="popup-overlay" id="popupOverlay">
+  <div class="popup">
+    <p id="popupMessage">Mensagem</p>
+  </div>
+</div>
+
+<script>
+const espStatus = document.getElementById("espStatus");
+const espIP = document.getElementById("espIP");
+const logList = document.getElementById("logList");
+const btnAcionar = document.getElementById("btnAcionar");
+const btnCadastro = document.getElementById("btnCadastro");
+const tempoCadastro = document.getElementById("tempoCadastro");
+const cadastroContainer = document.getElementById("cadastroContainer");
+
+const popupOverlay = document.getElementById("popupOverlay");
+const popupMessage = document.getElementById("popupMessage");
+
+let popupTimeout;
+let cadastroTimeout;
+// WebSocket
+let ws;
+function conectarWebSocket() {
+  ws = new WebSocket(`ws://${window.location.hostname}:8080/`);
+  ws.onopen = () => console.log("WebSocket conectado");
+  ws.onmessage = (event) => {
+    const msg = event.data;
+    if(msg.startsWith("cartao:")) {
+      const uid = msg.substring(7);
+      showPopup("Cartão cadastrado: " + uid, 5000);
+      carregarLogs();
+    }
+  };
+}
+conectarWebSocket();
+
+// Mostra cadastro só para admin
+const urlParams = new URLSearchParams(window.location.search);
+if(urlParams.get('route') === "admin") cadastroContainer.style.display = "block";
+
+// Função pop-up automática
+function showPopup(msg, timeout = 10000) {
+  popupMessage.textContent = msg;
+  popupOverlay.style.display = "flex";
+  if(popupTimeout) clearTimeout(popupTimeout);
+  popupTimeout = setTimeout(() => { popupOverlay.style.display = "none"; }, timeout);
+}
+
+// Conecta WebSocket
+function conectarWebSocket() {
+ws = new WebSocket(`ws://192.168.1.100:8080/`);
+  ws.onopen = () => console.log("WebSocket conectado");
+  ws.onmessage = (event) => {
+    const msg = event.data;
+
+    if(msg.startsWith("cartao:")) {
+      const uid = msg.substring(7);
+      showPopup("Cartão cadastrado: " + uid, 5000);
+      if(cadastroTimeout) clearTimeout(cadastroTimeout);
+      carregarLogs();
+    } else {
+      try{
+        const data = JSON.parse(msg);
+        if(data.event === "log"){
+          addLog(data.msg);
+        }
+      } catch(e){}
+    }
+  };
+  ws.onclose = () => {
+    console.log("WebSocket desconectado, reconectando...");
+    setTimeout(conectarWebSocket, 5000);
+  };
+}
+conectarWebSocket();
+
+function addLog(msg){
+  const li = document.createElement("li");
+  li.textContent = msg;
+  logList.prepend(li); // adiciona no topo
+  if(logList.childNodes.length > 20) logList.removeChild(logList.lastChild);
+}
+
+// Cadastro de cartão
+btnCadastro.addEventListener("click", async () => {
+  const dias = tempoCadastro.value;
+  showPopup("Aproxime o cartão na ESP", 30000);
+
+  try {
+    const res = await fetch('/cadastro', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ uid: dias })
+    });
+    const data = await res.json();
+    if(!data.ok) showPopup("Falha ao iniciar cadastro", 3000);
+
+    cadastroTimeout = setTimeout(() => {
+      showPopup("Tempo esgotado. Cadastro cancelado.", 3000);
+    }, 30000);
+
+  } catch(err){
+    showPopup("Erro na requisição", 3000);
+  }
+});
+
+// Função pop-up automática com opção de imagem e tempo
+function showPopup(msg, timeout = 10000, imgUrl = null) {
+  if(imgUrl){
+    popupMessage.innerHTML = `<img src="${imgUrl}" style="width:50px;height:50px;display:block;margin:0 auto;"><p>${msg}</p>`;
+  } else {
+    popupMessage.textContent = msg;
+  }
+  
+  popupOverlay.style.display = "flex";
+
+  if(popupTimeout) clearTimeout(popupTimeout);
+  popupTimeout = setTimeout(() => { 
+    popupOverlay.style.display = "none"; 
+  }, timeout);
+}
+
+// Acionar rele usando showPopup com imagem e tempo personalizado
+btnAcionar.addEventListener("click", async () => {
+  showPopup("Enviando comando para a ESP...", 10000, "https://cdn-icons-png.flaticon.com/512/148/148767.png");
+
+  try {
+    const res = await fetch('/acionar', { method: 'POST' });
+    const data = await res.json();
+
+    setTimeout(() => {
+      if(data.ok) {
+        showPopup("Rele acionado com sucesso!", 2000, "https://cdn-icons-png.flaticon.com/512/148/148767.png");
+      } else {
+        showPopup("Falha ao acionar rele", 2000, "https://cdn-icons-png.flaticon.com/512/148/148767.png");
+      }
+      carregarLogs();
+    }, 200);
+
+  } catch(err){
+    showPopup("Erro na requisição", 2000, "https://cdn-icons-png.flaticon.com/512/148/148767.png");
+  }
+});
+
+
+// Atualiza status da ESP
+async function atualizarStatus() {
+  try {
+    const res = await fetch('/status');
+    const data = await res.json();
+    if(data.connected){
+      espStatus.textContent = "ESP conectada";
+      espStatus.style.color = "#66ff66";
+      espIP.textContent = "IP: " + data.ip;
+    } else {
+      espStatus.textContent = "ESP desconectada";
+      espStatus.style.color = "#ff4d4d";
+      espIP.textContent = "IP: --";
+    }
+  } catch(err) {
+    espStatus.textContent = "Erro ao verificar ESP";
+    espStatus.style.color = "#ff4d4d";
+    espIP.textContent = "IP: --";
+  }
+}
+
+// Carrega logs
+async function carregarLogs() {
+  try {
+    const res = await fetch('/logs');
+    const data = await res.json();
+    logList.innerHTML = "";
+    data.forEach(log => addLog(log)); // adiciona do mais antigo ao mais recente, prepend coloca o mais recente no topo
+  } catch(err) { console.error(err); }
+}
+
+// Atualiza status e logs a cada 3s
+setInterval(() => { atualizarStatus(); carregarLogs(); }, 3000);
+atualizarStatus(); carregarLogs();
+</script>
+</body>
+</html>
