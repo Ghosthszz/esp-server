@@ -215,8 +215,11 @@ function showPopup(msg, timeout = 10000) {
 
 // Conecta WebSocket
 function conectarWebSocket() {
-ws = new WebSocket(`ws://192.168.1.100:8080/`);
+  // Use o domínio do Render e WSS
+  ws = new WebSocket(`wss://esp-server-0cde.onrender.com/`);
+
   ws.onopen = () => console.log("WebSocket conectado");
+
   ws.onmessage = (event) => {
     const msg = event.data;
 
@@ -226,20 +229,24 @@ ws = new WebSocket(`ws://192.168.1.100:8080/`);
       if(cadastroTimeout) clearTimeout(cadastroTimeout);
       carregarLogs();
     } else {
-      try{
+      try {
         const data = JSON.parse(msg);
         if(data.event === "log"){
           addLog(data.msg);
         }
-      } catch(e){}
+      } catch(e){ /* mensagem não JSON */ }
     }
   };
+
   ws.onclose = () => {
     console.log("WebSocket desconectado, reconectando...");
     setTimeout(conectarWebSocket, 5000);
   };
 }
+
+// Inicializa a conexão
 conectarWebSocket();
+
 
 function addLog(msg){
   const li = document.createElement("li");
