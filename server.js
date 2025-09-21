@@ -20,7 +20,7 @@ const wss = new WebSocketServer({ server });
 let espClients = [];
 
 wss.on('connection', (ws, req) => {
-  const ipESP = req.socket.remoteAddress.replace("::ffff:", "");
+  const ipESP = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
   console.log(`ESP conectada: ${ipESP}`);
   espClients.push({ ws, ip: ipESP });
 
@@ -32,7 +32,6 @@ wss.on('connection', (ws, req) => {
         fs.writeFileSync('logs.json', JSON.stringify(logs));
       }
     } catch(e){
-      // Mensagem não JSON -> ignora
       console.log("Recebido WS:", message.toString());
     }
   });
@@ -42,6 +41,7 @@ wss.on('connection', (ws, req) => {
     console.log(`ESP desconectada: ${ipESP}`);
   });
 });
+
 
 // Endpoints HTTP
 app.get('/status', (req,res)=>{
