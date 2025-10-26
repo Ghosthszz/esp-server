@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Leitor NFC Web</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background: #f5f5f5;
+      padding: 40px;
+    }
+    button {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      padding: 15px 25px;
+      font-size: 16px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    #log {
+      margin-top: 30px;
+      background: #fff;
+      padding: 20px;
+      border-radius: 10px;
+      min-height: 100px;
+      box-shadow: 0 0 8px rgba(0,0,0,0.1);
+    }
+  </style>
+</head>
+<body>
+  <h1>Leitor NFC via Web</h1>
+  <p>Toque em "Ler NFC" e aproxime uma tag do celular.</p>
+  <button id="lerBtn">📶 Ler NFC</button>
+  <div id="log">Aguardando leitura...</div>
+
+  <script>
+    const log = msg => document.getElementById('log').innerText = msg;
+
+    document.getElementById('lerBtn').addEventListener('click', async () => {
+      if ("NDEFReader" in window) {
+        try {
+          const ndef = new NDEFReader();
+          await ndef.scan();
+          log("Aproxime a tag NFC...");
+          
+          ndef.onreading = event => {
+            const decoder = new TextDecoder();
+            let message = "";
+            for (const record of event.message.records) {
+              message += decoder.decode(record.data) + "\n";
+            }
+            log("📗 Dados lidos:\n" + message);
+          };
+        } catch (error) {
+          log("❌ Erro: " + error);
+        }
+      } else {
+        log("Seu navegador não suporta Web NFC 😢 (use Chrome Android).");
+      }
+    });
+  </script>
+</body>
+</html>
